@@ -54,26 +54,17 @@ jobs:
           # 1. Fetch Key Vault URL and strip trailing slash
           KV_URL=$(az keyvault show --name ${{ env.KV_NAME }} --query "properties.vaultUri" --output tsv | sed 's/\/$//')
           
-          # 2. Assign Managed Identity (Idempotent)
-          az containerapp identity assign \
-            --name ${{ env.APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --user-assigned "${{ env.IDENTITY_ID }}"
-          
-          # 3. Register Key Vault Secrets (Idempotent)
-          az containerapp secret set \
-            --name ${{ env.APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --secrets "azure-openai-key=keyvaultref:$KV_URL/secrets/AzureOpenAIKey,identity=${{ env.IDENTITY_ID }}" \
-                      "google-api-key=keyvaultref:$KV_URL/secrets/GoogleAPIKey,identity=${{ env.IDENTITY_ID }}"
-          
-          # 4. Create or Update Container App
-          # Using 'create' ensures a clean state even if recreating after deletion.
+          # 2. Create or Update Container App
+          # Consolidated 'create' command handles identity, secrets, and image in one go.
+          # If the app exists, it will update it; if not, it will create it.
           az containerapp create \
             --name ${{ env.APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --environment ${{ env.ACA_ENV }} \
             --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            --user-assigned "${{ env.IDENTITY_ID }}" \
+            --secrets "azure-openai-key=keyvaultref:$KV_URL/secrets/AzureOpenAIKey,identity=${{ env.IDENTITY_ID }}" \
+                      "google-api-key=keyvaultref:$KV_URL/secrets/GoogleAPIKey,identity=${{ env.IDENTITY_ID }}" \
             --ingress external \
             --target-port 8000 \
             --set-env-vars \
