@@ -51,8 +51,8 @@ jobs:
 
       - name: Deploy to Container App
         run: |
-          # 1. Fetch Key Vault URL
-          KV_URL=$(az keyvault show --name ${{ env.KV_NAME }} --query "properties.vaultUri" --output tsv)
+          # 1. Fetch Key Vault URL and strip trailing slash
+          KV_URL=$(az keyvault show --name ${{ env.KV_NAME }} --query "properties.vaultUri" --output tsv | sed 's/\/$//')
           
           # 2. Assign Managed Identity (Idempotent)
           az containerapp identity assign \
