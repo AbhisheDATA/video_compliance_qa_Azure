@@ -127,7 +127,7 @@ class AuditResponse(BaseModel):
 # ↑ "/audit" = URL path (http://localhost:8000/audit)
 # ↑ response_model = Tells FastAPI to validate response matches AuditResponse
 
-async def audit_video(request: AuditRequest):
+def audit_video(request: AuditRequest):
     """
     Main API endpoint that triggers the compliance audit workflow.
     

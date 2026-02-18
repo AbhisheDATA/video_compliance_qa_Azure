@@ -103,10 +103,12 @@ class VideoIndexerService:
             
             url = f"https://api.videoindexer.ai/{self.location}/Accounts/{self.account_id}/Videos/{video_id}/Index"
             params = {"accessToken": vi_token}
+            logger.info(f"Checking status for video {video_id}...")
             response = requests.get(url, params=params)
             data = response.json()
             
             state = data.get("state")
+            logger.info(f"Current state: {state}")
             if state == "Processed":
                 return data
             elif state == "Failed":
@@ -114,7 +116,7 @@ class VideoIndexerService:
             elif state == "Quarantined":
                 raise Exception("Video Quarantined (Copyright/Content Policy Violation).")
             
-            logger.info(f"Status: {state}... waiting 30s")
+            logger.info(f"Waiting 30s before next poll...")
             time.sleep(30)
 
     def extract_data(self, vi_json):

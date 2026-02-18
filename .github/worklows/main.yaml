@@ -1,0 +1,75 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  ACR_LOGIN_SERVER: "brandguardianacr9294.azurecr.io" # Update with output from deploy.sh
+  IMAGE_NAME: "brand-guardian-api"
+  RESOURCE_GROUP: "myResourceGroup"
+  APP_NAME: "brand-guardian-api"
+  ACA_ENV: "brand-guardian-env"
+  KV_NAME: "brand-kv-1643" # Update with output from deploy.sh
+  IDENTITY_ID: "/subscriptions/a5ace9b0-b09e-44bd-b976-7d8ad63c3949/resourcegroups/myResourceGroup/providers/Microsoft.ManagedIdentity/userAssignedIdentities/brand-guardian-identity" # Update with output from deploy.sh
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: ACR Login
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and Push
+        run: |
+          docker build . -f backend/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -t ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Container App
+        run: |
+          # Fetch Key Vault URL
+          KV_URL=$(az keyvault show --name ${{ env.KV_NAME }} --query "properties.vaultUri" --output tsv)
+          
+          # Create or Update Container App
+          # Note: We use 'az containerapp up' or 'create' or 'update'. 
+          # Update is safest if the app exists.
+          
+          az containerapp update \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            --user-assigned "${{ env.IDENTITY_ID }}" \
+            --secrets "azure-openai-key=keyvaultref:$KV_URL/secrets/AzureOpenAIKey,identity=${{ env.IDENTITY_ID }}" \
+                      "google-api-key=keyvaultref:$KV_URL/secrets/GoogleAPIKey,identity=${{ env.IDENTITY_ID }}" \
+            --set-env-vars \
+              AZURE_OPENAI_API_KEY=secretref:azure-openai-key \
+              GOOGLE_API_KEY=secretref:google-api-key \
+              AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+              AZURE_OPENAI_API_VERSION="2024-02-15-preview" \
+              AZURE_SEARCH_ENDPOINT="${{ secrets.AZURE_SEARCH_ENDPOINT }}" \
+              AZURE_VI_LOCATION="centralindia" \
+              AZURE_VI_NAME="brand-yt-project1"
